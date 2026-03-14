@@ -254,7 +254,18 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
 export function useAppSessionContext() {
   const context = useContext(AppSessionContext);
   if (!context) {
-    throw new Error("useAppSessionContext must be used within AppSessionProvider");
+    return {
+      user: null,
+      authLoading: true,
+      profile: null,
+      profileLoading: true,
+      profileError: "Session not ready",
+      login: async () => {
+        throw new Error("Session not ready");
+      },
+      logout: async () => {},
+      refreshProfile: async () => {},
+    } as AppSessionContextValue;
   }
   return context;
 }
