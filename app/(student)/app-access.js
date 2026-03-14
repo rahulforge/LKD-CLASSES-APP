@@ -14,11 +14,29 @@ import useProfile from "../../src/hooks/useProfile";
 import useAuth from "../../src/hooks/useAuth";
 import { paymentService } from "../../src/services/paymentService";
 import { toastService } from "../../src/services/toastService";
+import { razorpayService } from "../../src/services/razorpayService";
+import { studentService } from "../../src/services/studentService";
 
 const DEFAULT_APP_ACCESS_FEE = Math.max(
   0,
   Number(process.env.EXPO_PUBLIC_APP_ACCESS_FEE ?? 50)
 );
+const RAZORPAY_KEY = process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID ?? "";
+const sanitizePhone = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length > 10) return digits.slice(-10);
+  return "";
+};
+const isNativeCheckoutUnavailable = (error) => {
+  const text = String(error?.message ?? "").toLowerCase();
+  return (
+    text.includes("module not loaded") ||
+    text.includes("cannot read property 'open' of null") ||
+    text.includes("cannot read properties of null") ||
+    text.includes("native module")
+  );
+};
 
 export default function AppAccessGate() {
   const router = useRouter();
@@ -75,14 +93,83 @@ export default function AppAccessGate() {
     }
     setStarting(true);
     try {
-      router.push({
-        pathname: "/(student)/checkout",
-        params: {
-          flow: "app_access",
-          title: encodeURIComponent("App Access Fee"),
-          amount: String(fee),
-        },
+      const intent = await paymentService.createPaymentIntent({
+        flow: "app_access",
+        classValue: profile.class ?? null,
+        months: [],
+        mockTestId: null,
+        planCode: null,
+        promoCode: null,
       });
+
+      if (intent.skipCheckout) {
+        await paymentService.verifyPaymentAndSync({
+          paymentId: intent.paymentId,
+          userId: profile.id,
+          studentType: profile.student_type,
+        });
+        await studentService.setAppAccessPaidForUser(profile.id, intent.paymentId);
+        await refreshProfile();
+        router.replace("/(student)/home");
+        return;
+      }
+
+      if (!intent.orderId) {
+        throw new Error("Order creation failed");
+      }
+      if (!RAZORPAY_KEY) {
+        throw new Error(
+          "In-app payment is required. Razorpay key missing in app env (EXPO_PUBLIC_RAZORPAY_KEY_ID)."
+        );
+      }
+
+      let response;
+      try {
+        response = await razorpayService.openCheckout({
+          key: RAZORPAY_KEY,
+          amount: intent.amount,
+          currency: intent.currency,
+          name: "LKD Classes",
+          description: "App Access Fee",
+          orderId: intent.orderId,
+          prefill: {
+            name: profile?.name ?? "",
+            contact: sanitizePhone(profile?.phone),
+          },
+          notes: {
+            flow: "app_access",
+            user_id: profile.id,
+          },
+        });
+      } catch (checkoutError) {
+        if (isNativeCheckoutUnavailable(checkoutError)) {
+          throw new Error(
+            "In-app Razorpay module unavailable. Install a development/production build (Expo Go not supported)."
+          );
+        }
+        throw checkoutError;
+      }
+
+      const verified = await paymentService.verifyRazorpayPayment({
+        paymentId: intent.paymentId,
+        razorpayOrderId: response.razorpay_order_id,
+        razorpayPaymentId: response.razorpay_payment_id,
+        razorpaySignature: response.razorpay_signature,
+      });
+      if (!verified) {
+        toastService.error("Verification failed", "Payment could not be verified.");
+        return;
+      }
+
+      await paymentService.verifyPaymentAndSync({
+        paymentId: intent.paymentId,
+        userId: profile.id,
+        studentType: profile.student_type,
+      });
+      await studentService.setAppAccessPaidForUser(profile.id, intent.paymentId);
+      await refreshProfile();
+      toastService.success("Payment success", "App access activated.");
+      router.replace("/(student)/home");
     } catch (error) {
       toastService.error("Payment failed", error?.message || "Please try again.");
     } finally {

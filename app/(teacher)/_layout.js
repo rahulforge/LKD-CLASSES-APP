@@ -113,6 +113,7 @@ export default function TeacherLayout() {
         <Tabs.Screen name="viewer" options={{ href: null }} />
         <Tabs.Screen name="classes/player" options={{ href: null }} />
         <Tabs.Screen name="create-mock-test" options={{ href: null }} />
+        <Tabs.Screen name="mock-tests" options={{ href: null }} />
         <Tabs.Screen name="add-task" options={{ href: null }} />
       </Tabs>
       <TeacherQuickActionsSheet open={quickOpen} onClose={() => setQuickOpen(false)} />

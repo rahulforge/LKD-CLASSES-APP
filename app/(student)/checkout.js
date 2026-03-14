@@ -45,6 +45,7 @@ export default function StudentCheckout() {
   const planCode = String(params.code || "").trim();
   const monthsParam = String(params.months || "").trim();
   const mockTestId = String(params.mock_test_id || "").trim();
+  const isAppAccess = flow === "app_access";
 
   const [promoCode, setPromoCode] = useState("");
   const [promoApplying, setPromoApplying] = useState(false);
@@ -54,6 +55,12 @@ export default function StudentCheckout() {
   const [finalAmount, setFinalAmount] = useState(null);
   const [creating, setCreating] = useState(false);
   const [verifying, setVerifying] = useState(false);
+
+  useEffect(() => {
+    if (isAppAccess) {
+      router.replace("/(student)/app-access");
+    }
+  }, [isAppAccess, router]);
 
   const months = useMemo(
     () => monthsParam.split(",").map((m) => m.trim()).filter(Boolean),
@@ -280,6 +287,16 @@ export default function StudentCheckout() {
     );
   }, [appliedPromoCode, discountPercent, estimatedAmount, flow]);
   const amountLabel = finalAmount !== null ? finalAmount : estimatedAfterPromo;
+
+  if (isAppAccess) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={[styles.body, { flex: 1, justifyContent: "center" }]}>
+          <ActivityIndicator color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>

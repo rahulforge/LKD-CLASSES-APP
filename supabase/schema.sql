@@ -52,6 +52,8 @@ create index if not exists students_class_idx on public.students(class_id);
 create index if not exists students_roll_idx on public.students(roll_number);
 create index if not exists students_admission_date_idx on public.students(admission_date);
 create unique index if not exists students_roll_unique_idx on public.students(roll_number) where roll_number is not null;
+create unique index if not exists students_phone_unique_idx on public.students(phone)
+where phone is not null and btrim(phone) <> '';
 
 alter table if exists public.profiles enable row level security;
 alter table if exists public.students enable row level security;
@@ -249,8 +251,6 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_class_id uuid;
 begin
   if pg_trigger_depth() > 1 then
     return new;
@@ -260,45 +260,19 @@ begin
     return new;
   end if;
 
-  if new.class is not null and (new.class::text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') then
-    v_class_id := new.class::uuid;
-  elsif nullif(trim(new.class::text), '') is not null then
-    select c.id
-    into v_class_id
-    from public.classes c
-    where lower(regexp_replace(c.name, '\s+', '', 'g')) =
-          lower(regexp_replace(new.class::text, '\s+', '', 'g'))
-    order by c.name asc
-    limit 1;
+  -- Only link profile to existing student rows (students is source of truth).
+  if new.phone is not null and btrim(new.phone) <> '' then
+    update public.students
+    set user_id = new.id
+    where user_id is null
+      and phone = new.phone;
   end if;
-
-  insert into public.students (
-    user_id, name, phone, class_id, category, student_type,
-    admission_paid, app_access_paid, roll_number, admission_date
-  )
-  values (
-    new.id,
-    coalesce(new.name, 'Student'),
-    nullif(new.phone, ''),
-    v_class_id,
-    case when coalesce(new.program_type, 'school') = 'competitive' then 'competitive' else 'school' end,
-    case when coalesce(new.student_type, 'online') = 'offline' then 'offline' else 'online' end,
-    coalesce(new.admission_paid, false),
-    coalesce(new.app_access_paid, false),
-    nullif(new.roll_number, ''),
-    coalesce((new.created_at at time zone 'asia/kolkata')::date, current_date)
-  )
-  on conflict (user_id) do update
-  set
-    name = excluded.name,
-    phone = excluded.phone,
-    class_id = coalesce(excluded.class_id, public.students.class_id),
-    category = excluded.category,
-    student_type = excluded.student_type,
-    admission_paid = excluded.admission_paid,
-    app_access_paid = excluded.app_access_paid,
-    roll_number = coalesce(excluded.roll_number, public.students.roll_number),
-    admission_date = coalesce(public.students.admission_date, excluded.admission_date);
+  if new.roll_number is not null and btrim(new.roll_number) <> '' then
+    update public.students
+    set user_id = new.id
+    where user_id is null
+      and roll_number = new.roll_number;
+  end if;
 
   return new;
 end;
@@ -499,6 +473,19 @@ where s.user_id = p.id
     or p.student_type is distinct from s.student_type
     or p.app_access_paid is distinct from s.app_access_paid
     or p.admission_paid is distinct from s.admission_paid
+  );
+
+-- Backfill profile name/phone from students (one-time sync)
+update public.profiles p
+set
+  name = coalesce(s.name, p.name),
+  phone = coalesce(s.phone, p.phone)
+from public.students s
+where s.user_id = p.id
+  and p.role = 'student'
+  and (
+    p.name is distinct from s.name
+    or p.phone is distinct from s.phone
   );
 
 alter table if exists public.profiles add column if not exists app_access_paid boolean default false;

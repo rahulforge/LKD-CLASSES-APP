@@ -385,29 +385,6 @@ export const profileService = {
             .eq("id", userId)
             .eq("role", "student");
         }
-      } else if (normalized.role === "student") {
-        const classIdCandidate = String(normalized.class ?? "").trim();
-        const classId = uuidPattern.test(classIdCandidate) ? classIdCandidate : null;
-        if (classId) {
-          await supabase.from("students").upsert(
-            {
-              user_id: userId,
-              name: normalized.name || "Student",
-              phone: normalized.phone ?? null,
-              class_id: classId,
-              category:
-                normalized.program_type === "competitive"
-                  ? "competitive"
-                  : "school",
-              student_type: normalized.student_type ?? "online",
-              admission_paid: Boolean(normalized.admission_paid),
-              app_access_paid: Boolean(normalized.app_access_paid),
-              roll_number: normalized.roll_number ?? null,
-              admission_date: new Date(normalized.created_at).toISOString().slice(0, 10),
-            },
-            { onConflict: "user_id" }
-          );
-        }
       }
 
       if (!normalized.class) {
@@ -485,13 +462,15 @@ export const profileService = {
         .update({
           user_id: payload.userId,
           name: String(existing?.name ?? payload.name).trim(),
-          phone: normalizedPhone || payload.phone,
-          class_id: resolvedClassId,
-          category: finalProgramType === "competitive" ? "competitive" : "school",
-          student_type: finalStudentType,
-          admission_paid: finalAdmissionPaid,
-          app_access_paid: finalAppAccessPaid,
-          roll_number: existing?.roll_number ?? normalizedRoll || null,
+          phone: String(existing?.phone ?? normalizedPhone )|| payload.phone,
+          class_id: existing?.class_id ?? resolvedClassId,
+          category:
+            existing?.category ??
+            (finalProgramType === "competitive" ? "competitive" : "school"),
+          student_type: existing?.student_type ?? finalStudentType,
+          admission_paid: existing?.admission_paid ?? finalAdmissionPaid,
+          app_access_paid: existing?.app_access_paid ?? finalAppAccessPaid,
+          roll_number: (existing?.roll_number ?? normalizedRoll) || null,
         })
         .eq("id", existing.id)
         .is("user_id", null);
@@ -506,16 +485,17 @@ export const profileService = {
       .upsert({
         id: payload.userId,
         name: String(existing?.name ?? payload.name).trim(),
-        phone: normalizedPhone || payload.phone,
+        phone: String(existing?.phone ?? normalizedPhone) || payload.phone,
         role: "student",
-        class: resolvedClassId,
-        program_type: finalProgramType,
+        class: existing?.class_id ?? resolvedClassId,
+        program_type:
+          existing?.category === "competitive" ? "competitive" : finalProgramType,
         competitive_exam:
           payload.competitiveExam ?? null,
-        student_type: finalStudentType,
-        admission_paid: finalAdmissionPaid,
-        app_access_paid: finalAppAccessPaid,
-        roll_number: existing?.roll_number ?? normalizedRoll || null,
+        student_type: existing?.student_type ?? finalStudentType,
+        admission_paid: existing?.admission_paid ?? finalAdmissionPaid,
+        app_access_paid: existing?.app_access_paid ?? finalAppAccessPaid,
+        roll_number: (existing?.roll_number ?? normalizedRoll) || null,
         is_active: true,
       }, { onConflict: "id" });
 
@@ -526,15 +506,17 @@ export const profileService = {
     const studentPayload = {
       user_id: payload.userId,
       name: String(existing?.name ?? payload.name).trim(),
-      phone: normalizedPhone || payload.phone,
-      class_id: resolvedClassId,
-      category: finalProgramType === "competitive" ? "competitive" : "school",
-      student_type: finalStudentType,
-      admission_paid: finalAdmissionPaid,
-      app_access_paid: finalAppAccessPaid,
+      phone: String(existing?.phone ?? normalizedPhone) || payload.phone,
+      class_id: existing?.class_id ?? resolvedClassId,
+      category:
+        existing?.category ??
+        (finalProgramType === "competitive" ? "competitive" : "school"),
+      student_type: existing?.student_type ?? finalStudentType,
+      admission_paid: existing?.admission_paid ?? finalAdmissionPaid,
+      app_access_paid: existing?.app_access_paid ?? finalAppAccessPaid,
       admission_date:
         existing?.admission_date ?? new Date().toISOString().slice(0, 10),
-      roll_number: existing?.roll_number ?? normalizedRoll || null,
+      roll_number: (existing?.roll_number ?? normalizedRoll) || null,
     };
 
     const studentInsert = existing?.id

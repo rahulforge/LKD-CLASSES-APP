@@ -251,6 +251,79 @@ export const mockTestService = {
       });
   },
 
+  async getTestsForTeacher(teacherId: string) {
+    const id = String(teacherId ?? "").trim();
+    if (!id) return [];
+    const res = await supabase
+      .from("mock_tests")
+      .select(
+        "id, title, class_id, program_type, scheduled_for, duration_minutes, marks_per_question, negative_marks, is_free, price, created_at, created_by, classes(name)"
+      )
+      .or(`created_by.eq.${id},created_by.is.null`)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (res.error || !res.data) return [];
+    return (res.data as any[]).map((row) => ({
+      ...normalizeTest(row),
+      class_name: row?.classes?.name ?? null,
+    }));
+  },
+
+  async updateMockTest(input: {
+    id: string;
+    title?: string;
+    class_id?: string | null;
+    program_type?: "all" | "school" | "competitive";
+    scheduled_for?: string | null;
+    duration_minutes?: number | null;
+    marks_per_question?: number | null;
+    negative_marks?: number | null;
+    is_free?: boolean;
+    price?: number | null;
+  }): Promise<void> {
+    const testId = String(input.id ?? "").trim();
+    if (!testId) throw new Error("Missing test id");
+    const payload: Record<string, any> = {};
+    if (input.title !== undefined) payload.title = String(input.title).trim();
+    if (input.class_id !== undefined) payload.class_id = input.class_id ?? null;
+    if (input.program_type !== undefined) payload.program_type = input.program_type ?? "all";
+    if (input.scheduled_for !== undefined) payload.scheduled_for = input.scheduled_for ?? null;
+    if (input.duration_minutes !== undefined) {
+      payload.duration_minutes = Math.max(1, Math.min(180, Number(input.duration_minutes ?? 60)));
+    }
+    if (input.marks_per_question !== undefined) {
+      payload.marks_per_question = Math.max(
+        0.25,
+        Math.min(20, Number(input.marks_per_question ?? 1))
+      );
+    }
+    if (input.negative_marks !== undefined) {
+      payload.negative_marks = Math.max(0, Math.min(20, Number(input.negative_marks ?? 0)));
+    }
+    if (input.is_free !== undefined) payload.is_free = Boolean(input.is_free);
+    if (input.price !== undefined) payload.price = Math.max(0, Number(input.price ?? 0));
+
+    const res = await supabase.from("mock_tests").update(payload).eq("id", testId);
+    if (res.error) {
+      throw new Error(res.error.message || "Unable to update mock test");
+    }
+  },
+
+  async deleteMockTest(testId: string): Promise<void> {
+    const id = String(testId ?? "").trim();
+    if (!id) throw new Error("Missing test id");
+
+    const qDelete = await supabase.from("mock_test_questions").delete().eq("mock_test_id", id);
+    if (qDelete.error) {
+      throw new Error(qDelete.error.message || "Unable to delete test questions");
+    }
+    const tDelete = await supabase.from("mock_tests").delete().eq("id", id);
+    if (tDelete.error) {
+      throw new Error(tDelete.error.message || "Unable to delete mock test");
+    }
+  },
+
   async getTestWithQuestions(testId: string) {
     const [testRes, qRes] = await Promise.all([
       supabase.from("mock_tests").select("*").eq("id", testId).maybeSingle(),

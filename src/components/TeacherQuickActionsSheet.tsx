@@ -19,6 +19,7 @@ const ACTIONS: { label: string; icon: keyof typeof Ionicons.glyphMap; route: str
   { label: "Upload Result", icon: "ribbon", route: "/(teacher)/upload-result" },
   { label: "Live / Schedule Class", icon: "radio", route: "/(teacher)/go-live" },
   { label: "Create Mock Test", icon: "clipboard", route: "/(teacher)/create-mock-test" },
+  { label: "Manage Mock Tests", icon: "list", route: "/(teacher)/mock-tests" },
   { label: "Add Tomorrow Plan", icon: "calendar", route: "/(teacher)/add-task" },
 ];
 
